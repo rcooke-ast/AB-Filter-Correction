@@ -276,8 +276,10 @@ def LoadData(filttab):
     Load the data from the filter table, and merge all photometry into a single table that is used for the fitting
     """
     # Perform some checks on the input to make sure there's no duplicate filter names
+    print("Performing checks on the data")
 
     # Load all information into a single merged table
+    print("Loading data")
 
     return mergetab
 
@@ -285,18 +287,13 @@ def LoadData(filttab):
 if __name__ == "__main__":
     outdirc = "Outputs"
 
-    # Load the full data table
-    This needs to be done after reading filter info
-    print("Loading data")
-    tab = Table.read("../FINAL_TABLE_BEST_CANDIDATES_WITH_PHOTOMETRY.csv")
-    nstars = len(tab)
-    print("Number of stars = ", nstars)
-
     filttab = Table.read("filter_input.csv", format='ascii.csv')
     # Load the data
     tab = LoadData(filttab)
+    nstars = len(tab)
+    print("Number of stars = ", nstars)
 
-    # Setup the wavelength grid
+    # Setup the parameters of the fit
     threshold = 1.0E-4
     numsample = 20000
     sum_chisq_old = np.inf
