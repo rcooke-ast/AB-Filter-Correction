@@ -47,3 +47,5 @@ TWOMASS,TWOMASS_Ks.dat,CookeSuzukiProchaska.csv,2MASS_k,2MASS_k_err
 #GALEX,GALEX_NUV.dat,CookeSuzukiProchaska.csv,GALEX_nuv_mag,GALEX_nuv_mag_err
 #WISE,W1.dat
 #WISE,W2.dat
+###
+# Add your own filters below here
