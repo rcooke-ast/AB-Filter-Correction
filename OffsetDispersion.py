@@ -271,25 +271,36 @@ def myfunct(par_bb, fjac=None, y=None, err=None, id_star=None, id_filt=None, res
     return [status, np.sqrt(chi2)]
 
 
+def LoadData(filttab):
+    """
+    Load the data from the filter table, and merge all photometry into a single table that is used for the fitting
+    """
+    # Perform some checks on the input to make sure there's no duplicate filter names
+
+    # Load all information into a single merged table
+
+    return mergetab
+
+
 if __name__ == "__main__":
     outdirc = "Outputs"
 
     # Load the full data table
+    This needs to be done after reading filter info
     print("Loading data")
-    tabtmp = Table.read("../FINAL_TABLE_BEST_CANDIDATES_WITH_PHOTOMETRY.csv")
-    ww = np.where((tabtmp['objid']!=267) & (tabtmp['objid']!=313))
-    tab = tabtmp[ww]
+    tab = Table.read("../FINAL_TABLE_BEST_CANDIDATES_WITH_PHOTOMETRY.csv")
     nstars = len(tab)
-    plotit = False
     print("Number of stars = ", nstars)
 
-    fdict = Table.read("filter_input.csv", format='ascii.csv')
+    filttab = Table.read("filter_input.csv", format='ascii.csv')
+    # Load the data
+    tab = LoadData(filttab)
 
     # Setup the wavelength grid
     threshold = 1.0E-4
     numsample = 20000
     sum_chisq_old = np.inf
-    filts = list(fdict.keys())
+    filts = list(filttab.keys())
     nfilts = len(filts)
     numiter = 1000  # Iterate this many times until the changes to the magnitudes is negligible
     # Initialize the filter systematic offsets and dispersion
@@ -313,18 +324,18 @@ if __name__ == "__main__":
     for tt in range(nstars):
         for ff, filt in enumerate(filts):
             # Check if a magnitude is available
-            if tab[tt][fdict[filt][0]] <= 0:  # A masked value
+            if tab[tt][filttab[filt][0]] <= 0:  # A masked value
                 all_magm[tt, ff] = False
                 continue
-            if fdict[filt][1] is not None:
-                if tab[tt][fdict[filt][1]] <= 0:  # A masked value
+            if filttab[filt][1] is not None:
+                if tab[tt][filttab[filt][1]] <= 0:  # A masked value
                     all_magm[tt, ff] = False
                     continue
             # Store the magnitude
-            all_mags[tt, ff] = tab[tt][fdict[filt][0]]
+            all_mags[tt, ff] = tab[tt][filttab[filt][0]]
             # Store or calculate the error
-            if fdict[filt][1] is not None:
-                all_mage[tt, ff] = tab[tt][fdict[filt][1]]
+            if filttab[filt][1] is not None:
+                all_mage[tt, ff] = tab[tt][filttab[filt][1]]
             else:
                 print("Unsupported filter!")
                 embed()
