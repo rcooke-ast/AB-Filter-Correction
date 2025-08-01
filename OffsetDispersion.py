@@ -1,4 +1,4 @@
-import os
+import os, sys
 import copy as copycp
 
 import numpy as np
@@ -13,9 +13,11 @@ import astropy.units as u
 import astropy.constants as cons
 import mpfit_single as mpfit
 
-MAGTYPE_GALEXFUV = 0
-MAGTYPE_GALEXNUV = 1
-MAGTYPE_AB = 2
+from IPython import embed
+
+MAGTYPE_AB = 0
+MAGTYPE_GALEXFUV = 1
+MAGTYPE_GALEXNUV = 2
 
 # Intrinsic dispersion priors
 mn_off, mx_off = -0.3, +0.3
@@ -188,22 +190,32 @@ def getname(t):
     return this_name
 
 
-def load_filters(waves, mask, filts):
+def LoadFilters(waves, mask, filttab):
+    """
+    Load the filter responses for the given wavelengths.
+
+    Parameters
+    ----------
+    waves : array_like
+        Wavelengths at which to evaluate the filter responses.
+    mask : array_like
+        Boolean mask indicating which filters to include (True for included, False for excluded).
+    filttab : AstropyTable
+        Table containing filter names and their properties.
+    """
     nfilts = np.sum(np.logical_not(mask))
     responses = np.zeros((waves.size, nfilts))
-    magtypes = np.zeros(nfilts)
     midwaves = np.zeros(nfilts)
     cntr = 0
-    for ff, filt in enumerate(filts):
-        if mask[ff]: continue
-        if filt == "GALEX_FUV": magtypes[ff] = MAGTYPE_GALEXFUV
-        elif filt == "GALEX_NUV": magtypes[ff] = MAGTYPE_GALEXNUV
-        else: magtypes[ff] = MAGTYPE_AB
-        wave, sens = np.loadtxt('filters/'+filt+'.dat', unpack=True)
+    for ff, filt in enumerate(filttab['Filter Response Filename']):
+        if mask[ff]:
+            continue
+        dirc = filttab['Folder'][ff] + '/'
+        wave, sens = np.loadtxt('filters/'+dirc+filt, unpack=True)
         responses[:, cntr] = interpolate.interp1d(wave.copy(), sens.copy(), kind='linear', bounds_error=False, fill_value=0.0)(waves)
         midwaves[ff] = np.sum(wave.copy()*sens.copy())/np.sum(sens.copy())
         cntr += 1
-    return midwaves, responses, magtypes
+    return midwaves, responses
 
 
 def blackbody_func(a, teff, waves, responses, magtype, GaiaG, fmag=False):
@@ -256,61 +268,117 @@ def myfunct(par_bb, fjac=None, y=None, err=None, id_star=None, id_filt=None, res
     # Extract some useful information
     nstars = np.max(id_star)+1
     model = np.zeros(y.size)
-    sigma2 = np.zeros(y.size)
+    sigma = np.zeros(y.size)
     # Loop over all stars
     for ss in range(nstars):
         wresp = np.where(id_star==ss)
         this_filt = id_filt[wresp]
         model[wresp] = blackbody_func(par_bb[2*ss], par_bb[2*ss + 1], waves, responses[:,this_filt], magtype[this_filt], y[0])
         # Calculate the intrinsic dispersion and the total error value
-        sigma2[wresp] = err[wresp]**2
+        sigma[wresp] = err[wresp]
     # Non-negative status value means MPFIT should
     # continue, negative means stop the calculation.
-    chi2 = np.abs(((y-model)**2)/sigma2)
     status = 0
-    return [status, np.sqrt(chi2)]
+    return [status, (y-model)/sigma]
 
 
 def LoadData(filttab):
     """
     Load the data from the filter table, and merge all photometry into a single table that is used for the fitting
+
+    Parameters
+    ----------
+    filttab : AstropyTable
+        Table containing filter names and their properties.
+
+    Returns
+    -------
+    AstropyTable containing merged photometry data.
     """
     # Perform some checks on the input to make sure there's no duplicate filter names
     print("Performing checks on the data")
-
+    terminate = False
+    for ff, filt in enumerate(filttab['Filter Response Filename']):
+        if np.sum(filttab['Filter Response Filename'] == filt) > 1:
+            print("ERROR - Duplicate filter name found: ", filt)
+            terminate = True
+    for ff, phot in enumerate(filttab['Photometry']):
+        if np.sum(filttab['Photometry'] == phot) > 1:
+            print("ERROR - Duplicate photometry name found: ", phot)
+            terminate = True
+    for ff, phot in enumerate(filttab['Photometry Error']):
+        if np.sum(filttab['Photometry Error'] == phot) > 1:
+            print("ERROR - Duplicate photometry error name found: ", phot)
+            terminate = True
+    # If any of the checks failed, terminate the program
+    if terminate:
+        print("Exiting due to bad data input.")
+        sys.exit()
+    # Check that Gaia is the first filter in the table
+    if filttab['Filter Response Filename'][0] != 'Gaia3G.dat':
+        print("ERROR - Gaia G filter must be the first filter in the table!")
+        sys.exit()
     # Load all information into a single merged table
-    print("Loading data")
-
+    print("Loading data...")
+    mergetab = Table()
+    for ff in range(len(filttab)):
+        dirc = filttab['Folder'][ff] + '/'
+        filt = filttab['Filter Response Filename'][ff]
+        if not os.path.exists('filters/' + dirc + filt):
+            print("ERROR - Filter file not found: ", "filters/" + dirc + filt)
+            sys.exit()
+        # Load the photmetry catalogue
+        cat = Table.read(filttab['Photometry Catalogue'][ff], format='ascii.csv')
+        # Insert the data for all stars with photometry with this filter into the merged table
+        if ff == 0:
+            # Setup the table with the relevant information
+            mergetab['source_id'] = cat['source_id']
+            mergetab[filttab['Photometry'][ff]] = cat[filttab['Photometry'][ff]]
+            mergetab[filttab['Photometry Error'][ff]] = cat[filttab['Photometry Error'][ff]]
+        else:
+            # Cross-match the source IDs to ensure we only include stars that have photometry in this filter
+            ind = np.array([], dtype=int)
+            for ll in range(len(cat)):
+                wind = np.where(mergetab['source_id'] == cat['source_id'][ll])[0]
+                if len(wind) != 1:
+                    print("ERROR - Source ID not found in merged table: ", cat['source_id'][ll])
+                    sys.exit()
+                ind = np.append(ind, wind[0])
+            # Add the photometry for this filter to the merged table
+            mergetab[filttab['Photometry'][ff]] = np.zeros(len(mergetab), dtype=float)
+            mergetab[filttab['Photometry Error'][ff]] = np.zeros(len(mergetab), dtype=float)
+            mergetab[filttab['Photometry'][ff]][ind] = cat[filttab['Photometry'][ff]]
+            mergetab[filttab['Photometry Error'][ff]][ind] = cat[filttab['Photometry Error'][ff]]
     return mergetab
 
 
 if __name__ == "__main__":
     outdirc = "Outputs"
+    plotit = False
 
-    filttab = Table.read("filter_input.csv", format='ascii.csv')
+    filttab = Table.read("filter_input.csv", format='ascii.csv', comment="#")
+    magtypes = filttab['MagType'].astype(int)
     # Load the data
-    tab = LoadData(filttab)
-    nstars = len(tab)
+    phottab = LoadData(filttab)
+    nstars = len(phottab)
     print("Number of stars = ", nstars)
 
     # Setup the parameters of the fit
     threshold = 1.0E-4
     numsample = 20000
     sum_chisq_old = np.inf
-    filts = list(filttab.keys())
-    nfilts = len(filts)
+    nfilts = len(filttab)
     numiter = 1000  # Iterate this many times until the changes to the magnitudes is negligible
     # Initialize the filter systematic offsets and dispersion
     magoffs = np.zeros(nfilts)
     magdisp = np.zeros(nfilts)
     old_magdisp = magdisp.copy()
     # Initialize the blackbody parameters
-    init_a, init_t = np.ones(len(tab)), np.ones(len(tab))
+    init_a, init_t = np.ones(nstars), np.ones(nstars)
     
     # Load filter responses
     waves = np.linspace(1300.0, 56000.0, numsample)  # Includes the wavelength range for GALEX FUV - WISE W2
-    midwave, responses, magtypes = load_filters(waves, np.zeros(len(filts), dtype=bool), filts)
-    wise_midwave, wise_responses, wise_magtypes = load_filters(waves, np.zeros(4, dtype=bool), ['GALEX_FUV', 'GALEX_NUV', 'WISE_W1', 'WISE_W2'])
+    midwave, responses = LoadFilters(waves, np.zeros(nfilts, dtype=bool), filttab)
     waves *= u.AA
 
     # Load data
@@ -319,26 +387,22 @@ if __name__ == "__main__":
     all_mage = -1*np.ones((nstars,nfilts))  # Corresponding magnitude errors
     all_magm = np.ones((nstars,nfilts), dtype=bool)  # Mask indicating if a filter has a measurement (True = good data)
     for tt in range(nstars):
-        for ff, filt in enumerate(filts):
+        for ff in range(nfilts):
+            # Grab the names for convenience
+            photname = filttab['Photometry'][ff]
+            photerrs = filttab['Photometry Error'][ff]
             # Check if a magnitude is available
-            if tab[tt][filttab[filt][0]] <= 0:  # A masked value
+            if phottab[tt][photname] <= 0:  # A masked value
                 all_magm[tt, ff] = False
                 continue
-            if filttab[filt][1] is not None:
-                if tab[tt][filttab[filt][1]] <= 0:  # A masked value
-                    all_magm[tt, ff] = False
-                    continue
+            if phottab[tt][photerrs] <= 0:  # A masked value
+                all_magm[tt, ff] = False
+                continue
             # Store the magnitude
-            all_mags[tt, ff] = tab[tt][filttab[filt][0]]
+            all_mags[tt, ff] = phottab[tt][photname]
             # Store or calculate the error
-            if filttab[filt][1] is not None:
-                all_mage[tt, ff] = tab[tt][filttab[filt][1]]
-            else:
-                print("Unsupported filter!")
-                embed()
-                assert(False)
-    
-    allcoo = SkyCoord(ra=tab['ra']*u.deg, dec=tab['dec']*u.deg)
+            all_mage[tt, ff] = phottab[tt][photerrs]
+
     total_chisq = np.zeros((nstars,numiter))
     for nn in range(numiter):
 #       tab = Table.read("all_BBtable_v3.csv")
@@ -350,15 +414,6 @@ if __name__ == "__main__":
         all_chisq, all_dof, all_redchisq = np.zeros(nstars), np.zeros(nstars), np.zeros(nstars)
         print("Current iteration:", nn)
         for tt in range(nstars):
-#             if tt+1==27:
-#                 # This has bad SMSS photometry
-#                 continue
-#             print(f"Plotting star {tt+1}/{len(tab)}")
-#             print(magoffs)
-            # Get the coordinate of this BB star
-            coo = allcoo[tt]
-            wisewave, magswise, magewise = np.array([1516,2267,34000,46000]), np.array([tab[tt]['GALEX_fuv_mag'],tab[tt]['GALEX_nuv_mag'],tab[tt]['WISE_W1'],tab[tt]['WISE_W2']]), np.array([tab[tt]['GALEX_fuv_mag_err'],tab[tt]['GALEX_nuv_mag_err'],tab[tt]['WISE_W1_err'],tab[tt]['WISE_W2_err']])
-
             p0 = [init_a[tt], init_t[tt]]
             # Set some constraints you would like to impose
             param_base={'value':0., 'fixed':0, 'limited':[0,0], 'limits':[0.,0.], 'step':1.0E-6}
@@ -373,10 +428,6 @@ if __name__ == "__main__":
             for pp in range(len(p0)):
                 param_info[pp]['limited'] = [1,0]
                 param_info[pp]['limits']  = [0.0,0.0]
-
-            # Normalisation
-#             param_info[0]['value'] = 1.0
-#             param_info[0]['fixed'] = 1
 
             mags = all_mags[tt,:].reshape((1,nfilts))
             mage = all_mage[tt,:].reshape((1,nfilts))
@@ -398,77 +449,14 @@ if __name__ == "__main__":
                 print("ERROR")
                 assert False
 
-            # Now perform MCMC
-            if False:
-                ndim, nwalkers = 2, 10
-                priors = np.zeros((ndim,2))
-                priors[0,0] = m.params[0]/2
-                priors[0,1] = m.params[0]*2
-                priors[1,0] = m.params[1]/1.3
-                priors[1,1] = m.params[1]*1.3
-
-                pos = [np.array([np.random.uniform(priors[0,0], priors[0,1]),
-                                 np.random.uniform(priors[1,0], priors[1,1])
-                                 ]) for i in range(nwalkers)]
-    #            print("Initialising sampler")
-                id_star = goodFilts[0]
-                wresp = np.where(id_star==0)
-
-    #             with Pool() as pool:
-                sampler = emcee.EnsembleSampler(nwalkers, ndim, BB_log_probability, args=(magcens, magerrs, waves, responses, magtypes, id_filt[wresp], priors, GaiaG))
-    #             sampler = emcee.EnsembleSampler(nwalkers, ndim, BB_log_probability, pool=pool, args=(magcens, magerrs, waves, responses, magtypes, id_filt[wresp], priors, extfunc_arr, extfunc))
-                print("Running MCMC")
-                sampler.run_mcmc(pos, 1000, progress=True)
-    #                 sampler = emcee.EnsembleSampler(nwalkers, ndim, log_prob)
-    #                 sampler.run_mcmc(initial, nsteps, progress=True)
-    #                 multi_time = end - start
-    #                 print("Multiprocessing took {0:.1f} seconds".format(multi_time))
-    #                 print("{0:.1f} times faster than serial".format(serial_time / multi_time))
-
-                # Get the chains
-                flat_samples = sampler.get_chain(discard=500, thin=5, flat=True)
-                # Store the median values
-                mcmcA = np.percentile(flat_samples[:, 0], [16, 50, 84])
-                all_aval[tt] = mcmcA[1]
-                all_avale[tt] = 0.5*(mcmcA[2]-mcmcA[0])
-                mcmcB = np.percentile(flat_samples[:, 1], [16, 50, 84])
-                all_teff[tt] = mcmcB[1]*1.0E4
-                all_teffe[tt] = 0.5*(mcmcB[2]-mcmcB[0])*1.0E4
-
-                samples = sampler.get_chain()
-
-            if False:
-                fig, axes = plt.subplots(2, figsize=(10, 7), sharex=True)
-                samples = sampler.get_chain()
-                labels = ["a", "Teff"]
-                for i in range(ndim):
-                    ax = axes[i]
-                    ax.plot(samples[:, :, i], "k", alpha=0.3)
-                    ax.set_xlim(0, len(samples))
-                    ax.set_ylabel(labels[i])
-                    ax.yaxis.set_label_coords(-0.1, 0.5)
-
-                axes[-1].set_xlabel("step number")
-                plt.show()
-                tau = sampler.get_autocorr_time()
-
-            if False:
-                modmags, fwav, fmags = get_blackbody_samples(flat_samples, waves, all_aval[tt], all_teff[tt]*1.0E-4, responses[:,id_filt], magtypes[id_filt], GaiaG)
-                if all_ebv[tt] == 0.0:
-                    modmags, fmag = blackbody_func(m.params[0], m.params[1], waves, responses[:,id_filt], magtypes[id_filt], GaiaG, fmag=True)
-                    fwavb = waves
-                else:
-                    fmag = fmags[3,:]
-                    fwavb = fwav
-            else:
-                # Only doing chi-squared minimization
-                modmags, fmag = blackbody_func(m.params[0], m.params[1], waves, responses[:,id_filt], magtypes[id_filt], GaiaG, fmag=True)
-                fwavb = waves
-                all_aval[tt] = m.params[0]
-                all_avale[tt] = m.perror[0]
-                all_teff[tt] = m.params[1]*1.0E4
-                all_teffe[tt] = m.perror[1]*1.0E4
-                init_a[tt], init_t[tt] = m.params[0], m.params[1]
+            # Only doing chi-squared minimization
+            modmags, fmag = blackbody_func(m.params[0], m.params[1], waves, responses[:,id_filt], magtypes[id_filt], GaiaG, fmag=True)
+            fwavb = waves
+            all_aval[tt] = m.params[0]
+            all_avale[tt] = m.perror[0]
+            all_teff[tt] = m.params[1]*1.0E4
+            all_teffe[tt] = m.perror[1]*1.0E4
+            init_a[tt], init_t[tt] = m.params[0], m.params[1]
 
             all_mags[tt,id_filt] = mags[goodFilts]
             all_mage[tt,id_filt] = mage[goodFilts]
@@ -487,10 +475,6 @@ if __name__ == "__main__":
                 astr = "a = {0:.4f} +/- {1:.4f} x 10^-23".format(all_aval[tt], all_avale[tt])
                 tstr = "T = {0:.1f} +/- {1:.1f} K ".format(all_teff[tt], all_teffe[tt])
                 plt.title(f"{astr}    {tstr}", fontsize=10)
-                # Plot the model
-                if False:
-                    plt.fill_between(fwav, fmags[0,:], y2=fmags[-1,:], color='r', alpha=0.2, zorder=-100)
-                    plt.fill_between(fwav, fmags[1,:], y2=fmags[-2,:], color='r', alpha=0.45, zorder=-99)
                 plt.plot(fwavb, fmag, 'r-', linewidth=2, label='blackbody', zorder=-97)
                 # Plot the model magnitudes, and measured magnitudes
                 plt.plot(midwave[id_filt], modmags, 'bx', label='model')
@@ -527,7 +511,7 @@ if __name__ == "__main__":
                 plt.xlim(np.min(waves.value), np.max(waves.value))
                 plt.xscale("log")
                 # Save the figure
-                BBname = getname(tab[tt])
+                BBname = getname(phottab[tt])
                 outname = f'{outdirc}/{BBname}.pdf'
                 plt.savefig(outname)
                 os.system(f'pdfcrop --margins=2 {outname} {outname}')
