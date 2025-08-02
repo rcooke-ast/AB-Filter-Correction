@@ -129,7 +129,7 @@ def get_textable_postamble():
     """
     textable = ""
     textable += "\\end{tabular}\n\n"
-    textable += "$^{\\rm a}$ All reported corrections ($\\Delta m_{\\rm F,T}$) and intrinsic dispersions ($\\sigma_{\\rm F,sys}$) are quoted relative to the Gaia $G$ magnitude.\n""
+    textable += "$^{\\rm a}$ All reported corrections ($\\Delta m_{\\rm F,T}$) and intrinsic dispersions ($\\sigma_{\\rm F,sys}$) are quoted relative to the Gaia $G$ magnitude.\n"
     textable += "    \\label{tab:filtercorr}\n"
     textable += "\\end{table}\n"
     return textable
