@@ -2,6 +2,7 @@ Folder,Filter Name,Filter Response Filename,Photometry Catalogue,Photometry,Phot
 # The format of this file is a CSV file with the above columns:
 #
 # Folder = the folder (inside the filters/ folder) where you have stored the filter response files
+# Filter Name = the name of the filter (e.g. u, g, r, etc.)
 # Filter Response Filename = the name of the filter response file
 # Photometry Catalogue = the name of the photometry catalogue file (e.g. CookeSuzukiProchaska2026.csv) where you have stored the photometric information
 # Photometry = the name of the column in the photometry catalogue that contains the photometric values

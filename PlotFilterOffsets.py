@@ -108,6 +108,33 @@ def LoadIDX(filttab):
     return idx, survey, filters
 
 
+def get_textable_preamble():
+    """
+    Returns the preamble for the LaTeX table.
+    """
+    textable = ""
+    textable += "\\begin{table}\n"
+    textable += "    \\centering\n"
+    textable += "    \\caption{Filter Corrections (AB = Catalogue + $\\Delta m_{\\rm F,T}$)}\n"
+    textable += "    \\begin{tabular}{lcccc}\n"
+    textable += "\\hline\n"
+    textable += "Survey + Filter & $N$ & $\\Delta m_{\\rm F,T}$ & $\\sigma_{\\rm F,sys}$ & Sig. \\\\\n"
+    textable += "\\hline\n"
+    textable += "\\hline\n"
+    return textable
+
+def get_textable_postamble():
+    """
+    Returns the postamble for the LaTeX table.
+    """
+    textable = ""
+    textable += "\\end{tabular}\n\n"
+    textable += "$^{\\rm a}$ All reported corrections ($\\Delta m_{\\rm F,T}$) and intrinsic dispersions ($\\sigma_{\\rm F,sys}$) are quoted relative to the Gaia $G$ magnitude.\n""
+    textable += "    \\label{tab:filtercorr}\n"
+    textable += "\\end{table}\n"
+    return textable
+
+
 def prepare_table(outdirc, prefix, filttab, funcform="blackbody"):
     """
     Create the figure with the SEDs and the filters
@@ -195,7 +222,7 @@ def prepare_table(outdirc, prefix, filttab, funcform="blackbody"):
     norm = Normalize(np.min(midwave), 1.0)
     colors = cmap(norm(midwave))
 
-    textable = ""
+    textable = get_textable_preamble()
 
     # Loop through the surveys and plot the data
     for ax in range(npanel):
@@ -243,7 +270,9 @@ def prepare_table(outdirc, prefix, filttab, funcform="blackbody"):
 
         textable += "\\hline\n"
 
-    print(textable)
+    textable += get_textable_postamble()
+
+    print("\n\n\n\n" + textable + "\n\n\n\n")
 
     subs = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]  # ticks to show per decade
     axs[ax].xaxis.set_minor_locator(ticker.LogLocator(subs=subs))  # set the ticks position
