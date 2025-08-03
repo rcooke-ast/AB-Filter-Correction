@@ -103,7 +103,6 @@ def blackbody_func(a, teff, waves, responses, magtype, GaiaG, fmag=False):
         return modelmag
 
 
-
 def myfunct(par_bb, fjac=None, y=None, err=None, id_star=None, id_filt=None, responses=None, waves=None, magtype=None, nfilts=None, idx=None):
     """
     y         :: Measured magnitude
@@ -157,30 +156,11 @@ def run_iterfit(outdirc, prefix, filttab, plotit=False):
     waves *= u.AA
 
     # Load data
-    print("Loading data...")
-    all_mags = -1 * np.ones((nstars, nfilts))  # Magnitude data for each star and filter
-    all_mage = -1 * np.ones((nstars, nfilts))  # Corresponding magnitude errors
-    all_magm = np.ones((nstars, nfilts), dtype=bool)  # Mask indicating if a filter has a measurement (True = good data)
-    for tt in range(nstars):
-        for ff in range(nfilts):
-            # Grab the names for convenience
-            photname = filttab['Photometry'][ff]
-            photerrs = filttab['Photometry Error'][ff]
-            # Check if a magnitude is available
-            if phottab[tt][photname] <= 0:  # A masked value
-                all_magm[tt, ff] = False
-                continue
-            if phottab[tt][photerrs] <= 0:  # A masked value
-                all_magm[tt, ff] = False
-                continue
-            # Store the magnitude
-            all_mags[tt, ff] = phottab[tt][photname]
-            # Store or calculate the error
-            all_mage[tt, ff] = phottab[tt][photerrs]
+    print("Loading photometry...")
+    all_mags, all_mage, all_magm = Utils.LoadPhotometry(phottab, filttab)
 
     total_chisq = np.zeros((nstars, numiter))
     for nn in range(numiter):
-        #       tab = Table.read("all_BBtable_v3.csv")
         all_modl = np.zeros((nstars, nfilts))
         filt_diffs = np.zeros((nstars, nfilts))
         filt_diffe = np.zeros((nstars, nfilts))
@@ -226,8 +206,7 @@ def run_iterfit(outdirc, prefix, filttab, plotit=False):
                 sys.exit()
 
             # Only doing chi-squared minimization
-            modmags, fmag = blackbody_func(m.params[0], m.params[1], waves, responses[:, id_filt], magtypes[id_filt],
-                                           GaiaG, fmag=True)
+            modmags, fmag = blackbody_func(m.params[0], m.params[1], waves, responses[:, id_filt], magtypes[id_filt], GaiaG, fmag=True)
             fwavb = waves
             all_aval[tt] = m.params[0]
             all_avale[tt] = m.perror[0]

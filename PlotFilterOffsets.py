@@ -76,38 +76,6 @@ def gettexline(missionname, filttext, y, errp, errm, se, sep, sem, ns):
         y) + offtxte + "$ & $" + fullsystxt + "$ & $" + sigtxt.format(sig) + "$ \\\\\n"
 
 
-def LoadIDX(filttab):
-    """
-    Load the index of the filters from the provided table.
-
-    Parameters
-    ----------
-    filttab : astropy.table.Table
-        The table containing filter information.
-
-    Returns
-    -------
-    idx : numpy.ndarray
-        An array of indices corresponding to the filters.
-    survey : list
-        A list of unique survey names extracted from the table.
-    """
-    # Find the number of unique surveys
-    thisidx, thissurvey = 0, str(filttab['Folder'][0])
-    # Initialise
-    idx = np.array([thisidx], dtype=int)
-    survey = [thissurvey]
-    filters = np.array(str(filttab['Filter Name'][0]))
-    for row in range(1, len(filttab)):
-        if str(filttab['Folder'][row]) != thissurvey:
-            thisidx += 1
-            thissurvey = str(filttab['Folder'][row])
-            survey.append(thissurvey)
-        idx = np.append(idx, thisidx)
-        filters = np.append(filters, str(filttab['Filter Name'][row]))
-    return idx, survey, filters
-
-
 def get_textable_preamble():
     """
     Returns the preamble for the LaTeX table.
@@ -122,6 +90,7 @@ def get_textable_preamble():
     textable += "\\hline\n"
     textable += "\\hline\n"
     return textable
+
 
 def get_textable_postamble():
     """
@@ -155,7 +124,7 @@ def prepare_table(outdirc, prefix, filttab, funcform="blackbody"):
         raise ValueError("funcform must be 'blackbody' or 'atmosphere'")
 
     # Determine the number of surveys and the filter information
-    idx, surveys, filters = LoadIDX(filttab)
+    idx, surveys, filters = Utils.LoadIDX(filttab)
     nfilts = len(filters)
 
     filtfontsize = 10

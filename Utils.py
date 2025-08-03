@@ -119,6 +119,10 @@ def LoadData(filttab):
         if ff == 0:
             # Setup the table with the relevant information
             mergetab['source_id'] = cat['source_id']
+            mergetab['ra'] = cat['ra']
+            mergetab['dec'] = cat['dec']
+            mergetab['pmra'] = cat['pmra']
+            mergetab['pmdec'] = cat['pmdec']
             mergetab[filttab['Photometry'][ff]] = cat[filttab['Photometry'][ff]]
             mergetab[filttab['Photometry Error'][ff]] = cat[filttab['Photometry Error'][ff]]
         else:
@@ -136,6 +140,82 @@ def LoadData(filttab):
             mergetab[filttab['Photometry'][ff]][ind] = cat[filttab['Photometry'][ff]]
             mergetab[filttab['Photometry Error'][ff]][ind] = cat[filttab['Photometry Error'][ff]]
     return mergetab
+
+
+def LoadPhotometry(phottab, filttab):
+    """
+    Load the photometry data from the provided table and filter information.
+
+    Parameters
+    ----------
+    phottab : astropy.table.Table
+        The table containing photometry data.
+    filttab : astropy.table.Table
+        The table containing filter information.
+
+    Returns
+    -------
+    all_mags : np.ndarray
+        Array of magnitudes for each star and filter.
+    all_mage : np.ndarray
+        Array of magnitude errors for each star and filter.
+    all_magm : np.ndarray
+        Boolean mask indicating if a filter has a measurement (True = good data).
+    """
+    nstars = len(phottab)  # Number of stars in the photometry table
+    nfilts = len(filttab)  # Number of filters in the filter table
+    all_mags = -1 * np.ones((nstars, nfilts))  # Magnitude data for each star and filter
+    all_mage = -1 * np.ones((nstars, nfilts))  # Corresponding magnitude errors
+    all_magm = np.ones((nstars, nfilts), dtype=bool)  # Mask indicating if a filter has a measurement (True = good data)
+    for tt in range(nstars):
+        for ff in range(nfilts):
+            # Grab the names for convenience
+            photname = filttab['Photometry'][ff]
+            photerrs = filttab['Photometry Error'][ff]
+            # Check if a magnitude is available
+            if phottab[tt][photname] <= 0:  # A masked value
+                all_magm[tt, ff] = False
+                continue
+            if phottab[tt][photerrs] <= 0:  # A masked value
+                all_magm[tt, ff] = False
+                continue
+            # Store the magnitude
+            all_mags[tt, ff] = phottab[tt][photname]
+            # Store or calculate the error
+            all_mage[tt, ff] = phottab[tt][photerrs]
+    return all_mags, all_mage, all_magm
+
+
+def LoadIDX(filttab):
+    """
+    Load the index of the filters from the provided table.
+
+    Parameters
+    ----------
+    filttab : astropy.table.Table
+        The table containing filter information.
+
+    Returns
+    -------
+    idx : numpy.ndarray
+        An array of indices corresponding to the filters.
+    survey : list
+        A list of unique survey names extracted from the table.
+    """
+    # Find the number of unique surveys
+    thisidx, thissurvey = 0, str(filttab['Folder'][0])
+    # Initialise
+    idx = np.array([thisidx], dtype=int)
+    survey = [thissurvey]
+    filters = np.array(str(filttab['Filter Name'][0]))
+    for row in range(1, len(filttab)):
+        if str(filttab['Folder'][row]) != thissurvey:
+            thisidx += 1
+            thissurvey = str(filttab['Folder'][row])
+            survey.append(thissurvey)
+        idx = np.append(idx, thisidx)
+        filters = np.append(filters, str(filttab['Filter Name'][row]))
+    return idx, survey, filters
 
 
 def getname(t):

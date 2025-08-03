@@ -1,13 +1,7 @@
 Folder,Filter Name,Filter Response Filename,Photometry Catalogue,Photometry,Photometry Error,MagType
-# The format of this file is a CSV file with the above columns:
-#
-# Folder = the folder (inside the filters/ folder) where you have stored the filter response files
-# Filter Response Filename = the name of the filter response file
-# Photometry Catalogue = the name of the photometry catalogue file (e.g. CookeSuzukiProchaska2026.csv) where you have stored the photometric information
-# Photometry = the name of the column in the photometry catalogue that contains the photometric values
-# Photometry Error = the name of the column in the photometry catalogue that contains the photometric errors
-# MagType = 0 for AB magnitudes, 1 for GALEX FUV magnitudes, 2 for GALEX NUV magnitudes
-#
+# The format of this file is the same as fitler_input.csv.
+# These filters are not used as input, but will be used to generate synthetic photometry, and can also
+# be used to estimate the offsets between the model magnitudes and the measured magnitudes.
 ### GAIA PHOTOMETRY
 Gaia,G,Gaia3G.dat,CookeSuzukiProchaska2026.csv,phot_g_mean_ABmag,phot_g_mean_ABmag_err,0
 Gaia,BP,Gaia3GBp.dat,CookeSuzukiProchaska2026.csv,phot_bp_mean_ABmag,phot_bp_mean_ABmag_err,0
@@ -43,6 +37,12 @@ TWOMASS,J,TWOMASS_J.dat,CookeSuzukiProchaska2026.csv,2MASS_j,2MASS_j_err,0
 TWOMASS,H,TWOMASS_H.dat,CookeSuzukiProchaska2026.csv,2MASS_h,2MASS_h_err,0
 TWOMASS,Ks,TWOMASS_Ks.dat,CookeSuzukiProchaska2026.csv,2MASS_k,2MASS_k_err,0
 ###
+### GALEX PHOTOMETRY
+GALEX,FUV,GALEX_FUV.dat,CookeSuzukiProchaska2026.csv,GALEX_fuv_mag,GALEX_fuv_mag_err,1
+GALEX,NUV,GALEX_NUV.dat,CookeSuzukiProchaska2026.csv,GALEX_nuv_mag,GALEX_nuv_mag_err,2
+### WISE PHOTOMETRY
+WISE,W1,W1.dat,CookeSuzukiProchaska2026.csv,WISE_W1,WISE_W1_err,0
+WISE,W2,W2.dat,CookeSuzukiProchaska2026.csv,WISE_W2,WISE_W2_err,0
 # Comments are filters that are not included in the fit
 ###
 # Add your own filters below here
