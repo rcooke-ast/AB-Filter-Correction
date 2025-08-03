@@ -242,6 +242,7 @@ def prepare_table(outdirc, prefix, filttab, funcform="blackbody"):
     textable += get_textable_postamble()
 
     print("\n\n\n\n" + textable + "\n\n\n\n")
+    open(outdirc+prefix+'_filter_offsets_table.tex', 'w').write(textable)
 
     subs = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]  # ticks to show per decade
     axs[ax].xaxis.set_minor_locator(ticker.LogLocator(subs=subs))  # set the ticks position
