@@ -10,11 +10,16 @@ from astropy.table import Table
 import astropy.units as u
 
 import emcee
+import corner
 
 import Utils
 from IterFit import blackbody_func
 
 from IPython import embed
+
+plt.rcParams.update({
+    "text.usetex": True,
+})
 
 
 def ticks_format(value, index):
@@ -391,3 +396,181 @@ def run_blackbody_params_mcmc(outdirc, prefix, filttab, funcform="blackbody", pl
 
     # Save the synthetic magnitudes
     synth_phot.write(outdirc+prefix+"_synthetic_mags.csv", overwrite=True)
+
+def make_corner_plots(outdirc, prefix, filttab):
+
+    # Load the photometry so that we know how many stars there are
+    print("Loading data")
+    phottab = Utils.LoadData(filttab)
+    nstars = len(phottab)
+
+    all_a, all_aerr, all_t, all_terr = np.zeros(nstars), np.zeros(nstars), np.zeros(nstars), np.zeros(nstars)
+    for ff in range(nstars):
+        BBname = Utils.getname(phottab[ff])
+        fname_samples = f'{outdirc}{prefix}_flatsamples_{BBname}.npy'
+        if os.path.exists(fname_samples):
+            samples = np.load(fname_samples)
+            samples[:, 1] *= 1.0E4
+        else:
+            print(f"Samples don't exist!  Ignoring {BBname}")
+            continue
+        # Load the data
+        # in_samples = np.load(allsamples[ff].strip())
+        # samples = in_samples.reshape((-1, 2))
+        # samples[:, 1] *= 1.0E4
+        fs = 12
+        bbnamestr = BBname.replace("_", "").replace("p", "$+$").replace("m", "$-$")
+        bbstr = r'{0:s}'.format(bbnamestr)
+        # Make the triangle plot.
+        levels = 1.0 - np.exp(-0.5 * np.arange(1.0, 2.1, 1.0) ** 2)
+        contour_kwargs, contourf_kwargs = dict({}), dict({})
+        contour_kwargs["linewidths"] = [1.0, 1.0]
+        contourf_kwargs["colors"] = ((1, 1, 1), (0.6, 0.6, 0.6), (0.3, 0.3, 0.3))
+        labels = [r"${\rm a}~(10^{-23})$", r"$T~(K)$"]
+        fig = corner.corner(samples, bins=[50, 50], levels=levels, plot_datapoints=False, fill_contours=True,
+                            plot_density=False, contour_kwargs=contour_kwargs, contourf_kwargs=contourf_kwargs,
+                            smooth=1, labels=labels)
+        axes = np.array(fig.axes).reshape((2, 2))
+        # Compute the quantiles.
+        a_mcmc, T_mcmc = map(lambda v: (v[1], v[2] - v[1], v[1] - v[0]),
+                             zip(*np.percentile(samples, [16, 50, 84],
+                                                axis=0)))
+        print("""MCMC result:
+            flux = {0[0]} +{0[1]} -{0[2]})
+            temp = {1[0]} +{1[1]} -{1[2]})
+        """.format(a_mcmc, T_mcmc))
+        T_mcmc = np.round(T_mcmc)
+        all_a[ff] = a_mcmc[0]
+        all_aerr[ff] = 0.5 * (a_mcmc[1] + a_mcmc[2])
+        all_t[ff] = T_mcmc[0]
+        all_terr[ff] = int(0.5 * (T_mcmc[1] + T_mcmc[2]))
+        # Write some information in the blank space
+        axes[0, 1].text(0.5, 0.55, bbstr, va='center', ha='center', fontsize=fs + 3)
+        axes[0, 1].text(0.5, 0.4, r'$a=({0:.3f}\pm{1:.3f})E-23$'.format(a_mcmc[0], 0.5 * (a_mcmc[1] + a_mcmc[2])),
+                        va='center', ha='center', fontsize=fs)
+        axes[0, 1].text(0.5, 0.3, r'$T={0:d}\pm{1:d}~K$'.format(int(T_mcmc[0]), int(0.5 * (T_mcmc[1] + T_mcmc[2]))),
+                        va='center', ha='center', fontsize=fs)
+        axes[0, 1].set_xlim(0, 1)
+        axes[0, 1].set_ylim(0, 1)
+        # Redo ranges to be more visually appealing
+        #     [axes[i,0].set_xlim(5.055,5.105) for i in range(2)]
+        #     axes[1,1].set_xlim(9625,9659)
+        #     axes[1,0].set_ylim(9625,9659)
+        [l.set_rotation(0) for l in axes[0, 0].get_yticklabels()]
+        [l.set_rotation(0) for l in axes[1, 0].get_yticklabels()]
+        # [l.set_rotation(0) for l in axes[2,0].get_yticklabels()]
+        [l.set_rotation(0) for l in axes[1, 0].get_xticklabels()]
+        [l.set_rotation(0) for l in axes[1, 1].get_xticklabels()]
+        # [l.set_rotation(0) for l in axes[2,2].get_xticklabels()]
+        [axes[i, i].yaxis.set_ticks_position('none') for i in range(2)]
+        [axes[1, i].xaxis.set_label_coords(0.5, -0.14) for i in range(2)]
+        [axes[i, 0].yaxis.set_label_coords(-0.25, 0.5) for i in range(1, 2)]
+        #     axes[1,1].set_xticks([9630,9640,9650])
+        #     [axes[i,0].set_xticks([5.06, 5.08, 5.10]) for i in range(2)]
+        #     axes[1,0].set_yticks([9630,9640,9650])
+        # axes[2,1].set_yticks([0.0, 0.1, 0.2])
+        Utils.replot_ticks(axes[1, 0])
+        # pr.replot_ticks(axes[2,0])
+        Utils.replot_ticks(axes[1, 1])
+
+        outname = fname_samples.replace(".npy", ".pdf")
+        fig.savefig(outname)
+        try:
+            os.system(f'pdfcrop --margins=2 {outname} {outname}')
+        except:
+            # Some users won't get their pdfs nicely cropped.
+            pass
+
+        [([tk.set_visible(True) for tk in ax.get_yticklabels()],
+          [tk.set_visible(True) for tk in ax.get_yticklabels()]) for ax in axes.flatten()]
+
+    np.savetxt(outdirc+prefix+"_BBparams_MCMC.txt", np.transpose((all_a, all_aerr, all_t, all_terr)))
+
+
+def gettexline(y, err):
+    if err <= 0.0: return "\\ldots", "\\ldots"
+    nsigfig = 1 + int(abs(np.floor(np.log10(err))))
+    offtxt = "{0:." + str(nsigfig) + "f}"
+    errtxt = "{0:." + str(nsigfig) + "f}"
+    return offtxt.format(y), errtxt.format(err)
+
+
+def make_final_table(outdirc, prefix, filttab):
+
+    # Load the chi-squared information.
+    chisq, dof, redchisq = np.loadtxt(outdirc + prefix + "_BBparams.txt", unpack=True, usecols=(4,5,6))
+    # Load the final a and T values from the MCMC results.
+    aval, avalerr, teff, tefferr = np.loadtxt(outdirc + prefix + "_BBparams_MCMC.txt", unpack=True)
+
+    # Load the data with the measured magnitudes of each star
+    phottab = Table.read('CookeSuzukiProchaska2026.csv', format='ascii.csv')
+
+    # Load the synthetic magnitudes
+    synth_tab = Table.read(outdirc + prefix + "_synthetic_mags.csv", format='ascii.csv')
+
+    # Prepare the strings for the LaTeX table and the PypeIt text file
+    pypeit_text = ""
+    tex_table = ""
+
+    for tt in range(len(phottab)):
+        # Find the index of the synthetic photometry in the measured photometry table
+        idx = np.where(phottab[tt]['source_id'] == synth_tab['source_id'])[0]
+        if len(idx) != 1:
+            print(f"Warning: No synthetic photometry found for {phottab[tt]['source_id']}")
+            sys.exit()
+        # Calculate the differences in synthetic to measured magnitudes for GALEX+WISE and their uncertainties (including measured and model uncertainties)
+        fuvval, fuverr = -1, -1
+        nuvval, nuverr = -1, -1
+        w1val, w1err = -1, -1
+        w2val, w2err = -1, -1
+        if phottab["GALEX_fuv_mag"][tt] > 0.0:
+            fuvval = synth_tab['GALEX_fuv_mag'][idx]-phottab["GALEX_fuv_mag"][tt]
+            fuverr = np.sqrt(synth_tab['GALEX_fuv_mag_err'][idx]**2 + phottab["GALEX_fuv_mag_err"][tt]**2)
+        if phottab["GALEX_nuv_mag"][tt] > 0.0:
+            nuvval = synth_tab['GALEX_nuv_mag'][idx]-phottab["GALEX_nuv_mag"][tt]
+            nuverr = np.sqrt(synth_tab['GALEX_nuv_mag_err'][idx]**2 + phottab["GALEX_nuv_mag_err"][tt]**2)
+        if phottab["WISE_W1"][tt] > 0.0:
+            w1val = synth_tab['WISE_W1'][idx]-phottab["WISE_W1"][tt]
+            w1err = np.sqrt(synth_tab['WISE_W1_err'][idx]**2 + phottab["WISE_W1_err"][tt]**2)
+        if phottab["WISE_W2"][tt] > 0.0:
+            w2val = synth_tab['WISE_W2'][idx]-phottab["WISE_W2"][tt]
+            w2err = np.sqrt(synth_tab['WISE_W2_err'][idx]**2 + phottab["WISE_W2_err"][tt]**2)
+        _, thiscoo = Utils.getname(phottab[tt], get_radec_str=True)
+        tmpname = thiscoo.split()
+        BBname = tmpname[0].split(".")[0].replace(":", "") + tmpname[1].split(".")[0].replace(":", "").replace("+","$+$").replace("-", "$-$")
+        rastr = tmpname[0].strip("BB").split(".")[0] + "." + tmpname[0].strip("BB").split(".")[1][:3]
+        decstr = tmpname[1].split(".")[0].replace("+", "$+$").replace("-", "$-$") + "." + tmpname[1].split(".")[1][:3]
+        gmag = phottab[tt]["phot_g_mean_ABmag"]
+        atxt, atxterr = gettexline(aval[tt], avalerr[tt])
+        FUVtxt, NUVtxt, W1txt, W2txt = '\\ldots', '\\ldots', '\\ldots', '\\ldots'
+        # Print the offsets to the GALEX/WISE photometry
+        if fuverr > 0.0:
+            tmpa, tmpb = gettexline(fuvval[0], fuverr[0])
+            FUVtxt = "{0:s}\\pm{1:s}".format(tmpa, tmpb)
+        if nuverr > 0.0:
+            tmpa, tmpb = gettexline(nuvval[0], nuverr[0])
+            NUVtxt = "{0:s}\\pm{1:s}".format(tmpa, tmpb)
+        if w1err > 0.0:
+            tmpa, tmpb = gettexline(w1val[0], w1err[0])
+            W1txt = "{0:s}\\pm{1:s}".format(tmpa, tmpb)
+        if w2err > 0.0:
+            tmpa, tmpb = gettexline(w2val[0], w2err[0])
+            W2txt = "{0:s}\\pm{1:s}".format(tmpa, tmpb)
+        #     SAatxt, SAatxterr = gettexline(SAaval[tt], SAavalerr[tt])
+        pmra = int(phottab[tt]["pmra"])
+        pmdec = int(phottab[tt]["pmdec"])
+        pypeit_text += "{0:s}.fits  {0:s}  {1:s}  {2:s}  {3:.2f}  DC  {4:d}  {5:.4f}\n".format(BBname, rastr, decstr, gmag, int(teff[tt]), aval[tt])
+        bbstr = "& ${0:s}\\pm{1:s}$ & ${2:d}\\pm{3:d}$ & {4:.3f} ".format(atxt, atxterr, int(teff[tt]), int(tefferr[tt]), redchisq[tt])
+        sastr = "& ${0:s}$ & ${1:s}$ & ${2:s}$ & ${3:s}$ ".format(FUVtxt, NUVtxt, W1txt, W2txt)
+        #     sastr = "& ${0:s}\\pm{1:s}$ & ${2:d}\\pm{3:d}$ & {4:.3f} ".format(SAatxt, SAatxterr, int(SAteff[tt]), int(SAtefferr[tt]), SAchisq[tt])
+        tex_table += "{0:s} & {1:s} & {2:s} & ${3:+d}$ & ${4:+d}$ & ${5:.2f}$ {6:s} {7:s}\\\\\n".format(BBname, rastr, decstr, pmra, pmdec, gmag, bbstr, sastr)
+    print("\n\n\n#########################################\nHere is the PypeIt table for the standard stars:\n\n")
+    print(pypeit_text.replace("$", ""))
+    # Save the PypeIt text file
+    with open(outdirc + prefix + "_PypeIt.txt", "w") as f:
+        f.write(pypeit_text)
+    print("\n\n\n\n#########################################\nHere is a LaTeX table of the best parameters:\n\n")
+    print(tex_table)
+    # Save the LaTeX table
+    with open(outdirc + prefix + "_BestParams_table.tex", "w") as f:
+        f.write(tex_table)

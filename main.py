@@ -33,4 +33,10 @@ if __name__ == "__main__":
     # Calculate the final blackbody parameters
     CalculateBlackbodyParamsMCMC.run_blackbody_params_mcmc(outdirc, prefix, filttab, plotit=plotit, rerun=True)
 
+    # Make the corner plots for the MCMC results
+    CalculateBlackbodyParamsMCMC.make_corner_plots(outdirc, prefix, filttab)
+
+    # Make the final table of all blackbody parameters
+    CalculateBlackbodyParamsMCMC.make_final_table(outdirc, prefix, filttab)
+
     print("All calculations completed successfully.")

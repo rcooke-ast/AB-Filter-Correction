@@ -218,14 +218,20 @@ def LoadIDX(filttab):
     return idx, survey, filters
 
 
-def getname(t):
+def getname(t, get_radec_str=False):
     coo = SkyCoord(ra=t['ra']*u.deg, dec=t['dec']*u.deg, pm_ra_cosdec=t['pmra']*u.mas/u.yr, pm_dec=t['pmdec']*u.mas/u.yr, obstime="J2016.0", equinox="J2016.0")
     cn = coo.apply_space_motion(Time("J2000.0"))
-    radecstr = "BB" + cn.to_string('hmsdms').replace('h','').replace('m','').replace('d', '').replace('s', '')
+    if get_radec_str:
+        radecstr = "BB" + cn.to_string('hmsdms').replace('h', ':').replace('m', ':').replace('d', ':').replace('s','')
+    else:
+        radecstr = "BB" + cn.to_string('hmsdms').replace('h', '').replace('m', '').replace('d', '').replace('s', '')
     hms_ra = radecstr.split()[0].split(".")[0]
     dms_dec = radecstr.split()[1].split(".")[0].replace("-","m").replace("+","p")
     this_name = hms_ra + "_" + dms_dec
-    return this_name
+    if get_radec_str:
+        return this_name, radecstr
+    else:
+        return this_name
 
 
 def plot_pm(axis, xy="x", zero=False, ftype=False):
@@ -280,3 +286,19 @@ def plot_pm(axis, xy="x", zero=False, ftype=False):
             labels[i] = newlbl
         axis.set_yticklabels(labels)
     return labels
+
+
+def replot_ticks(ax):
+    """
+    Replot the major and minor tick marks on a plot. This is primarily used when a
+    shaded region or line covers one or more of the tick marks
+    """
+    axlines = ax.xaxis.get_minorticklines()
+    for i in axlines: ax.add_line(i)
+    axlines = ax.yaxis.get_minorticklines()
+    for i in axlines: ax.add_line(i)
+    axlines = ax.xaxis.get_majorticklines()
+    for i in axlines: ax.add_line(i)
+    axlines = ax.yaxis.get_majorticklines()
+    for i in axlines: ax.add_line(i)
+    return
